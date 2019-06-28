@@ -1,7 +1,4 @@
-#include <stdio.h>
-#include <time.h>
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
+#include "kernel.h"
 
 const int BLOCK_NUM = 4;
 const int THREAD_PER_BLOCK = 512;
@@ -29,14 +26,12 @@ __global__ void gpuMatMultKernel(T *a, T *b, T *result, const int N, const int M
 void showDevice() {
 	cudaDeviceProp deviceProp;
 	int deviceCount = 0;
-	cudaError_t cudaError;
-	cudaError = cudaGetDeviceCount(&deviceCount);
+	cudaError_t cudaError = cudaGetDeviceCount(&deviceCount);
 	if (deviceCount == 0) {
 		printf("没有检测到设备");
 		return;
 	}
-	for (int i = 0; i < deviceCount; i++)
-	{
+	for (int i = 0; i < deviceCount; i++){
 		cudaError = cudaGetDeviceProperties(&deviceProp, i);
 
 		printf("设备 %d 的主要属性:\n", i);
@@ -50,117 +45,117 @@ void showDevice() {
 	}
 }
 
-//Matrix Multiplication
-//a[n][m] * b[m][k] = c[n][k]
-extern void matrixMultOnGPU(int **a, int **b, int **c, int n, int m, int k) {
-	//printf("starting CUDA matrix multiplication (int)\n");
-
+extern void GPUMatrixMul(float **a, float **b, float **c, int n, int m, int k) {
+	//detect available device(s)
 	int deviceCount = 0;
 	cudaGetDeviceCount(&deviceCount);
-	if (deviceCount == 0) {
-		printf("Error: No device");
+	if (deviceCount <= 0) {
+		printf("GPUMatrixMul(): Error, no device.\n");
 		return;
 	}
-
-	//parameters on device
-	int *dev_a = NULL;
-	int *dev_b = NULL;
-	int *dev_c = NULL;
 
 	//multi-device is not supported
 	cudaSetDevice(0);
 
-	cudaError_t error;
+	//parameters on device
+	float *dev_a = NULL, *dev_b = NULL, *dev_c = NULL;
+	const int TYPE_SIZE = sizeof(float);
 
 	//allocate memory for calculations on device
-	cudaMalloc((void**)&dev_a, sizeof(int) * n * m);
-	cudaMalloc((void**)&dev_b, sizeof(int) * m * k);
-	cudaMalloc((void**)&dev_c, sizeof(int) * n * k);
-	error = cudaGetLastError();
-	printf("CUDA malloc: %s\n", cudaGetErrorString(error));
+	cudaMalloc((void**)&dev_a, TYPE_SIZE * n * m);
+	cudaMalloc((void**)&dev_b, TYPE_SIZE * m * k);
+	cudaMalloc((void**)&dev_c, TYPE_SIZE * n * k);
 
 	//copy memory to device
-	cudaMemcpy(dev_a, a[0], sizeof(int) * n * m, cudaMemcpyHostToDevice);
-	cudaMemcpy(dev_b, b[0], sizeof(int) * m * k, cudaMemcpyHostToDevice);
-	error = cudaGetLastError();
-	printf("CUDA host to device: %s\n", cudaGetErrorString(error));
+	cudaMemcpy(dev_a, a[0], TYPE_SIZE * n * m, cudaMemcpyHostToDevice);
+	cudaMemcpy(dev_b, b[0], TYPE_SIZE * m * k, cudaMemcpyHostToDevice);
 
-	time_t t = clock();
 	//kernel function <<<block_number, thread_per_block>>>
-	gpuMatMultKernel<<<BLOCK_NUM, THREAD_PER_BLOCK>>>(dev_a, dev_b, dev_c, n, m, k);
-	cudaDeviceSynchronize(); //wait for multiplication over
-	printf("%dms\n", clock() - t);
-	error = cudaGetLastError();
-	printf("CUDA multi: %s\n", cudaGetErrorString(error));
+	gpuMatMultKernel<<<BLOCK_NUM, THREAD_PER_BLOCK >>> (dev_a, dev_b, dev_c, n, m, k);
+	cudaDeviceSynchronize();
 
 	//get memory from device
-	cudaMemcpy(&c[0][0], dev_c, n * k * sizeof(int), cudaMemcpyDeviceToHost);
-	error = cudaGetLastError();
-	printf("CUDA device to host: %s\n", cudaGetErrorString(error));
+	cudaMemcpy(c[0], dev_c, n * k * TYPE_SIZE, cudaMemcpyDeviceToHost);
+	cudaDeviceSynchronize();
 
 	//free
 	cudaFree(dev_a);
 	cudaFree(dev_b);
 	cudaFree(dev_c);
-	error = cudaGetLastError();
-	printf("CUDA mem free: %s\n", cudaGetErrorString(error));
-
-	//printf("CUDA matrix multiplication over\n");
 }
 
-//float version of matrix multiplication
-extern void matrixMultOnGPU(float **a, float **b, float **c, int n, int m, int k) {
-	//printf("starting CUDA matrix multiplication (float)\n");
-
+void GPUMatrixMul(double **a, double **b, double **c, int n, int m, int k) {
+	//detect available device(s)
 	int deviceCount = 0;
 	cudaGetDeviceCount(&deviceCount);
-	if (deviceCount == 0) {
-		printf("Error: No device");
+	if (deviceCount <= 0) {
+		printf("GPUMatrixMul(): Error, no device.\n");
 		return;
 	}
-
-	//parameters on device
-	float *dev_a = NULL;
-	float *dev_b = NULL;
-	float *dev_c = NULL;
 
 	//multi-device is not supported
 	cudaSetDevice(0);
 
-	cudaError_t error;
+	//parameters on device
+	double *dev_a = NULL, *dev_b = NULL, *dev_c = NULL;
+	const int TYPE_SIZE = sizeof(double);
 
 	//allocate memory for calculations on device
-	cudaMalloc((void**)&dev_a, sizeof(float) * n * m);
-	cudaMalloc((void**)&dev_b, sizeof(float) * m * k);
-	cudaMalloc((void**)&dev_c, sizeof(float) * n * k);
-	error = cudaGetLastError();
-	printf("CUDA malloc: %s\n", cudaGetErrorString(error));
+	cudaMalloc((void**)&dev_a, TYPE_SIZE * n * m);
+	cudaMalloc((void**)&dev_b, TYPE_SIZE * m * k);
+	cudaMalloc((void**)&dev_c, TYPE_SIZE * n * k);
 
 	//copy memory to device
-	cudaMemcpy(dev_a, a[0], sizeof(float) * n * m, cudaMemcpyHostToDevice);
-	cudaMemcpy(dev_b, b[0], sizeof(float) * m * k, cudaMemcpyHostToDevice);
-	error = cudaGetLastError();
-	printf("CUDA host to device: %s\n", cudaGetErrorString(error));
+	cudaMemcpy(dev_a, a[0], TYPE_SIZE * n * m, cudaMemcpyHostToDevice);
+	cudaMemcpy(dev_b, b[0], TYPE_SIZE * m * k, cudaMemcpyHostToDevice);
 
 	//kernel function <<<block_number, thread_per_block>>>
-	time_t t = clock();
 	gpuMatMultKernel << <BLOCK_NUM, THREAD_PER_BLOCK >> > (dev_a, dev_b, dev_c, n, m, k);
-	cudaDeviceSynchronize(); //wait for multiplication over
-	printf("%dms\n", clock() - t);
-	error = cudaGetLastError();
-	printf("CUDA multi: %s\n", cudaGetErrorString(error));
+	cudaDeviceSynchronize();
 
 	//get memory from device
-	cudaMemcpy(c[0], dev_c, n * k * sizeof(float), cudaMemcpyDeviceToHost);
-	error = cudaGetLastError();
-	printf("CUDA device to host: %s\n", cudaGetErrorString(error));
+	cudaMemcpy(c[0], dev_c, n * k * TYPE_SIZE, cudaMemcpyDeviceToHost);
 
 	//free
 	cudaFree(dev_a);
 	cudaFree(dev_b);
 	cudaFree(dev_c);
-	error = cudaGetLastError();
-	printf("CUDA mem free: %s\n", cudaGetErrorString(error));
+}
 
-	//printf("CUDA matrix multiplication over\n");
+void GPUMatrixMul(int **a, int **b, int **c, int n, int m, int k) {
+	//detect available device(s)
+	int deviceCount = 0;
+	cudaGetDeviceCount(&deviceCount);
+	if (deviceCount <= 0) {
+		printf("GPUMatrixMul(): Error, no device.\n");
+		return;
+	}
+
+	//multi-device is not supported
+	cudaSetDevice(0);
+
+	//parameters on device
+	int *dev_a = NULL, *dev_b = NULL, *dev_c = NULL;
+	const int TYPE_SIZE = sizeof(int);
+
+	//allocate memory for calculations on device
+	cudaMalloc((void**)&dev_a, TYPE_SIZE * n * m);
+	cudaMalloc((void**)&dev_b, TYPE_SIZE * m * k);
+	cudaMalloc((void**)&dev_c, TYPE_SIZE * n * k);
+
+	//copy memory to device
+	cudaMemcpy(dev_a, a[0], TYPE_SIZE * n * m, cudaMemcpyHostToDevice);
+	cudaMemcpy(dev_b, b[0], TYPE_SIZE * m * k, cudaMemcpyHostToDevice);
+
+	//kernel function <<<block_number, thread_per_block>>>
+	gpuMatMultKernel << <BLOCK_NUM, THREAD_PER_BLOCK >> > (dev_a, dev_b, dev_c, n, m, k);
+	cudaDeviceSynchronize();
+
+	//get memory from device
+	cudaMemcpy(c[0], dev_c, n * k * TYPE_SIZE, cudaMemcpyDeviceToHost);
+
+	//free
+	cudaFree(dev_a);
+	cudaFree(dev_b);
+	cudaFree(dev_c);
 }
